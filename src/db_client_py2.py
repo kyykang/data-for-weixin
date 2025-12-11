@@ -4,8 +4,9 @@
 
 功能说明：
 - 为了方便在任何环境跑起来，示例使用 Python 自带的 SQLite。
-- 表结构示例：alerts(id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, created_at TEXT)
-- 提供：初始化示例库、查询大于 last_id 的新数据。
+- 示例一：alerts(id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, created_at TEXT)
+- 示例二：bd_jobbasfil(id INTEGER PRIMARY KEY AUTOINCREMENT, jobcode TEXT, created_at TEXT)
+- 提供：初始化示例库、查询重复 jobcode 分组。
 """
 
 import os
@@ -60,30 +61,57 @@ def init_demo_if_needed(sqlite_path):
         conn.close()
 
 
-def query_new_alerts(sqlite_path, last_id, limit):
+def init_demo_jobcodes(sqlite_path):
     """
-    查询主键大于 last_id 的新数据，按 id 升序返回前 limit 条。
+    初始化示例表 bd_jobbasfil（如果不存在），并插入一组重复的 jobcode 数据。
 
-    参数：
-    - sqlite_path：数据库文件路径
-    - last_id：上次已处理的最大 id（整数）
-    - limit：最多返回的条数（整数）
-
-    返回：
-    - 列表，每个元素为字典：{"id": 123, "title": "...", "created_at": "..."}
+    目的：配合如下 SQL 查询产生结果：
+    select count(jobcode) as '重复次数', jobcode
+    from bd_jobbasfil group by jobcode having count(*)>1 order by jobcode desc;
     """
     conn = _connect_sqlite(sqlite_path)
     try:
         c = conn.cursor()
         c.execute(
-            "SELECT id, title, created_at FROM alerts WHERE id > ? ORDER BY id ASC LIMIT ?",
-            (int(last_id), int(limit)),
+            "CREATE TABLE IF NOT EXISTS bd_jobbasfil (\n"
+            "  id INTEGER PRIMARY KEY AUTOINCREMENT,\n"
+            "  jobcode TEXT,\n"
+            "  created_at TEXT\n"
+            ")"
+        )
+        # 插入一组重复 jobcode（两条同一个 jobcode），以及一条不重复数据
+        now = time.strftime("%Y-%m-%d %H:%M:%S")
+        c.execute("INSERT INTO bd_jobbasfil(jobcode, created_at) VALUES(?, ?)", ("JC-999", now))
+        c.execute("INSERT INTO bd_jobbasfil(jobcode, created_at) VALUES(?, ?)", ("JC-999", now))
+        c.execute("INSERT INTO bd_jobbasfil(jobcode, created_at) VALUES(?, ?)", ("JC-ABC", now))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def query_duplicate_jobcodes(sqlite_path):
+    """
+    执行重复 jobcode 查询，返回满足条件的分组列表。
+
+    查询语句：
+    select count(jobcode) as '重复次数', jobcode
+    from bd_jobbasfil group by jobcode having count(*)>1 order by jobcode desc;
+
+    返回：
+    - 列表，每个元素为字典：{"jobcode": "JC-999", "dup_count": 2}
+    """
+    conn = _connect_sqlite(sqlite_path)
+    try:
+        c = conn.cursor()
+        c.execute(
+            "SELECT COUNT(jobcode) AS dup_count, jobcode "
+            "FROM bd_jobbasfil GROUP BY jobcode HAVING COUNT(*)>1 ORDER BY jobcode DESC"
         )
         rows = c.fetchall()
         result = []
         for r in rows:
-            result.append({"id": int(r[0]), "title": r[1], "created_at": r[2]})
+            # r[0] = dup_count, r[1] = jobcode
+            result.append({"dup_count": int(r[0]), "jobcode": r[1]})
         return result
     finally:
         conn.close()
-

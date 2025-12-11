@@ -9,6 +9,7 @@
 """
 
 import json
+import sys
 try:
     import urllib2  # Python 2
 except Exception:
@@ -61,7 +62,10 @@ def send_text(access_token, agentid, touser, content, timeout=8):
         "text": {"content": content},
         "safe": 0,
     }
-    req = urllib2.Request(url, data=json.dumps(payload))
+    data_bytes = json.dumps(payload)
+    if sys.version_info[0] >= 3:
+        data_bytes = data_bytes.encode("utf-8")
+    req = urllib2.Request(url, data=data_bytes)
     req.add_header("Content-Type", "application/json")
     resp = urllib2.urlopen(req, timeout=timeout)
     body = resp.read()

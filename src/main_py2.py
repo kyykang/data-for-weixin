@@ -18,8 +18,7 @@ try:
 except Exception:
     from configparser import ConfigParser  # Python 3 调试兼容
 
-from state_py2 import load_last_id, save_last_id
-from db_client_py2 import init_demo_if_needed, query_new_alerts
+from db_client_py2 import init_demo_if_needed, init_demo_jobcodes, query_duplicate_jobcodes
 # 注意：为兼容 Python3 的干跑模式，我们在需要时再导入 wecom 客户端
 
 
@@ -120,7 +119,14 @@ def compose_markdown_message(rows, max_preview, msg_cfg=None):
     lines.append("")
     preview = rows[:max_preview]
     for r in preview:
-        lines.append(item_tpl.format(id=r["id"], title=r["title"], created_at=r["created_at"]))
+        try:
+            lines.append(item_tpl.format(**r))
+        except Exception:
+            # 回退到常见字段
+            lines.append(item_tpl)
+            lines.append(item_tpl.format(**r))
+        except Exception:
+            lines.append(item_tpl)
     if count > len(preview):
         lines.append("")
         lines.append(footer_tpl.format(omitted=(count - len(preview))))
@@ -147,9 +153,9 @@ def main():
 
     if args.init_demo:
         init_demo_if_needed(cfg["db"]["sqlite_path"])
+        init_demo_jobcodes(cfg["db"]["sqlite_path"])
 
-    last_id = load_last_id(args.state)
-    rows = query_new_alerts(cfg["db"]["sqlite_path"], last_id, args.limit)
+    rows = query_duplicate_jobcodes(cfg["db"]["sqlite_path"])
 
     if not rows:
         print("本次查询没有新的数据，结束。")
@@ -199,10 +205,7 @@ def main():
             if ok:
                 print("企业微信应用消息已发送成功。")
 
-    # 更新去重状态：记录这批的最大 id
-    new_last_id = max([r["id"] for r in rows])
-    save_last_id(args.state, new_last_id)
-    print("已更新去重状态：last_id = %d" % new_last_id)
+    return 0
     return 0
 
 

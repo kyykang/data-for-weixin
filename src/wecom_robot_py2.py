@@ -9,6 +9,7 @@
 """
 
 import json
+import sys
 try:
     import urllib2  # Python 2
 except Exception:
@@ -31,7 +32,10 @@ def send_text(webhook_url, content, mentioned_list=None, timeout=8):
     payload = {"msgtype": "text", "text": {"content": content}}
     if mentioned_list:
         payload["text"]["mentioned_list"] = mentioned_list
-    req = urllib2.Request(webhook_url, data=json.dumps(payload))
+    data_bytes = json.dumps(payload)
+    if sys.version_info[0] >= 3:
+        data_bytes = data_bytes.encode("utf-8")
+    req = urllib2.Request(webhook_url, data=data_bytes)
     req.add_header("Content-Type", "application/json")
     resp = urllib2.urlopen(req, timeout=timeout)
     body = resp.read()
@@ -52,7 +56,10 @@ def send_markdown(webhook_url, content, timeout=8):
     - timeout：网络超时秒数。
     """
     payload = {"msgtype": "markdown", "markdown": {"content": content}}
-    req = urllib2.Request(webhook_url, data=json.dumps(payload))
+    data_bytes = json.dumps(payload)
+    if sys.version_info[0] >= 3:
+        data_bytes = data_bytes.encode("utf-8")
+    req = urllib2.Request(webhook_url, data=data_bytes)
     req.add_header("Content-Type", "application/json")
     resp = urllib2.urlopen(req, timeout=timeout)
     body = resp.read()
@@ -60,4 +67,3 @@ def send_markdown(webhook_url, content, timeout=8):
     if data.get("errcode") == 0:
         return True
     raise Exception("Robot send failed: errcode=%s errmsg=%s" % (data.get("errcode"), data.get("errmsg")))
-
