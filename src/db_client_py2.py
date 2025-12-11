@@ -12,6 +12,25 @@
 import os
 import sqlite3
 import time
+import sys
+
+# 优先尝试 pymssql，其次 pyodbc，此外支持 pytds（用于 SQL Server 连接）
+_HAS_PYMSSQL = False
+_HAS_PYODBC = False
+_HAS_PYTDS = False
+try:
+    import pymssql
+    _HAS_PYMSSQL = True
+except Exception:
+    try:
+        import pyodbc
+        _HAS_PYODBC = True
+    except Exception:
+        try:
+            import pytds
+            _HAS_PYTDS = True
+        except Exception:
+            pass
 
 
 def ensure_dir(path):
@@ -33,6 +52,38 @@ def _connect_sqlite(sqlite_path):
     ensure_dir(dir_path)
     conn = sqlite3.connect(sqlite_path)
     return conn
+
+
+def _connect_sqlserver(host, user, password, database, port=1433, timeout=8):
+    """
+    连接到 SQL Server 数据库。
+
+    参数：
+    - host：数据库主机地址，例如 "10.250.122.101"
+    - user：用户名，例如 "sa"
+    - password：密码字符串
+    - database：数据库名，例如 "U8CLOUD202102"
+    - port：端口（默认 1433）
+    - timeout：连接超时时间（秒）
+
+    返回：
+    - 连接对象（pymssql.Connection 或 pyodbc.Connection）
+
+    说明：
+    - 优先使用 pymssql（推荐 Linux 安装 FreeTDS），否则使用 pyodbc（需安装 Microsoft ODBC Driver）。
+    """
+    if _HAS_PYMSSQL:
+        return pymssql.connect(server=host, user=user, password=password, database=database, port=int(port), login_timeout=timeout, timeout=timeout, charset='utf8')
+    if _HAS_PYODBC:
+        # 注意：pyodbc 需要系统已安装 ODBC 驱动（如 ODBC Driver 17 for SQL Server）
+        dsn = 'DRIVER={ODBC Driver 17 for SQL Server};SERVER=%s,%d;DATABASE=%s;UID=%s;PWD=%s;TrustServerCertificate=Yes' % (
+            host, int(port), database, user, password
+        )
+        return pyodbc.connect(dsn, timeout=timeout)
+    if _HAS_PYTDS:
+        # pytds 为纯 Python 驱动，安装简单；这里启用 autocommit 方便查询
+        return pytds.connect(server=host, user=user, password=password, database=database, port=int(port), autocommit=True)
+    raise Exception('未检测到可用的 SQL Server 驱动：请安装 pymssql、pyodbc 或 python-tds（pytds）')
 
 
 def init_demo_if_needed(sqlite_path):
@@ -115,3 +166,43 @@ def query_duplicate_jobcodes(sqlite_path):
         return result
     finally:
         conn.close()
+
+
+def query_duplicate_jobcodes_sqlserver(host, user, password, database, port=1433):
+    """
+    在 SQL Server 上执行重复 jobcode 查询。
+
+    查询语句与 SQLite 保持一致的语义：
+    SELECT COUNT(jobcode) AS dup_count, jobcode
+    FROM bd_jobbasfil GROUP BY jobcode HAVING COUNT(*)>1 ORDER BY jobcode DESC;
+
+    返回：
+    - 列表，每个元素为字典：{"jobcode": "JC-999", "dup_count": 2}
+    """
+    conn = _connect_sqlserver(host, user, password, database, port)
+    try:
+        sql = (
+            "SELECT COUNT(jobcode) AS dup_count, jobcode "
+            "FROM bd_jobbasfil GROUP BY jobcode HAVING COUNT(*)>1 ORDER BY jobcode DESC"
+        )
+        # 统一使用游标执行
+        cur = conn.cursor()
+        cur.execute(sql)
+        rows = cur.fetchall()
+        result = []
+        for r in rows:
+            try:
+                # 大多数驱动返回 (dup_count, jobcode)
+                dup_count = int(r[0])
+                jobcode = r[1]
+            except Exception:
+                # 某些驱动返回字典/Row 对象，做兼容处理
+                dup_count = int(getattr(r, 'dup_count', r[0]))
+                jobcode = getattr(r, 'jobcode', r[1])
+            result.append({"dup_count": dup_count, "jobcode": jobcode})
+        return result
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass

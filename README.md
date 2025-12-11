@@ -52,8 +52,13 @@ agentid=你的应用AgentID
 touser=接收人用户ID（可多个用竖线分隔）
 
 [db]
-driver=sqlite
+driver=sqlite  # 或 sqlserver
 sqlite_path=./data/demo.sqlite
+host=10.250.122.101
+port=1433
+database=U8CLOUD202102
+user=sa
+password=******
 
 [robot]
 # 使用企业微信群机器人推送（推荐用于群通知）
@@ -75,6 +80,10 @@ item_markdown=- id={id} ｜ {title} ｜ {created_at}
 footer_markdown=> 更多...（已省略 {omitted} 条）
 ```
 - 如果后续使用 MySQL/PostgreSQL，可拓展 `driver` 和连接参数；当前示例专注 SQLite 以便快速联调。
+ - 使用 SQL Server 时，建议安装以下任一驱动（Python 2.7 兼容）：
+   - `pymssql`（推荐，依赖 FreeTDS）：`pip2 install pymssql`
+   - `pyodbc`（需要安装 Microsoft ODBC Driver for SQL Server）：`pip2 install pyodbc`
+ - 在 Linux 上安装 ODBC 驱动示例（Ubuntu）：`sudo apt-get install msodbcsql17 unixodbc-dev`
 
 ## 安全与说明
 - 不要把真实密钥提交到仓库；`config.ini` 仅在你的服务器本地保存。

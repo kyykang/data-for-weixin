@@ -18,7 +18,7 @@ try:
 except Exception:
     from configparser import ConfigParser  # Python 3 调试兼容
 
-from db_client_py2 import init_demo_if_needed, init_demo_jobcodes, query_duplicate_jobcodes
+from db_client_py2 import init_demo_if_needed, init_demo_jobcodes, query_duplicate_jobcodes, query_duplicate_jobcodes_sqlserver
 # 注意：为兼容 Python3 的干跑模式，我们在需要时再导入 wecom 客户端
 
 
@@ -43,6 +43,12 @@ def read_config(path):
         "db": {
             "driver": cp.get("db", "driver"),
             "sqlite_path": cp.get("db", "sqlite_path"),
+            # SQL Server 可选参数（仅当 driver=sqlserver 时使用）
+            "host": cp.get("db", "host") if cp.has_option("db", "host") else "",
+            "port": int(cp.get("db", "port")) if cp.has_option("db", "port") else 1433,
+            "database": cp.get("db", "database") if cp.has_option("db", "database") else "",
+            "user": cp.get("db", "user") if cp.has_option("db", "user") else "",
+            "password": cp.get("db", "password") if cp.has_option("db", "password") else "",
         },
     }
     # 可选的消息模板配置
@@ -147,15 +153,20 @@ def main():
     args = parser.parse_args()
 
     cfg = read_config(args.config)
-    if cfg["db"]["driver"] != "sqlite":
-        # 入门先用 sqlite，后续可拓展其它数据库驱动
-        raise Exception("当前示例仅支持 sqlite；请在 config.ini 将 driver 设置为 sqlite")
 
-    if args.init_demo:
+    if args.init_demo and cfg["db"]["driver"] == "sqlite":
         init_demo_if_needed(cfg["db"]["sqlite_path"])
         init_demo_jobcodes(cfg["db"]["sqlite_path"])
 
-    rows = query_duplicate_jobcodes(cfg["db"]["sqlite_path"])
+    # 根据驱动选择数据源
+    if cfg["db"]["driver"] == "sqlite":
+        rows = query_duplicate_jobcodes(cfg["db"]["sqlite_path"])
+    elif cfg["db"]["driver"] == "sqlserver":
+        rows = query_duplicate_jobcodes_sqlserver(
+            cfg["db"]["host"], cfg["db"]["user"], cfg["db"]["password"], cfg["db"]["database"], cfg["db"].get("port", 1433)
+        )
+    else:
+        raise Exception("不支持的数据库驱动：%s" % cfg["db"]["driver"])
 
     if not rows:
         print("本次查询没有新的数据，结束。")
