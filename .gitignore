@@ -1,0 +1,6 @@
+config/config.ini
+state/
+data/*.sqlite
+logs/
+__pycache__/
+*.pyc

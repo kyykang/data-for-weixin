@@ -1,0 +1,34 @@
+[wecom]
+# 企业微信应用的企业ID
+corpid=
+# 企业微信应用的密钥
+corpsecret=
+# 企业微信应用的 AgentID（整数）
+agentid=
+# 接收消息的用户（多个用 | 分隔），先填你自己的企业微信账号
+touser=
+
+[db]
+# 入门先用 sqlite，便于本地调试
+driver=sqlite
+# SQLite 数据文件路径（相对或绝对路径均可）
+sqlite_path=./data/demo.sqlite
+
+[robot]
+# 群机器人完整 webhook 地址（形如：https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=...）
+webhook=
+# 可选：被@的成员列表，使用 | 分隔，例如：@all|zhangsan
+mentioned_list=
+# 消息格式：markdown 或 text（默认 markdown）
+format=markdown
+
+[message]
+# 文本格式模板（可选）：支持占位符 {count} {id} {title} {created_at} {omitted}
+title_text=数据库告警：检测到 {count} 条新数据
+item_text=id={id}，{title}（{created_at}）
+footer_text=更多...（已省略 {omitted} 条）
+
+# Markdown 格式模板（可选）：支持相同占位符
+title_markdown=## 数据库告警：检测到 {count} 条新数据
+item_markdown=- id={id} ｜ {title} ｜ {created_at}
+footer_markdown=> 更多...（已省略 {omitted} 条）
