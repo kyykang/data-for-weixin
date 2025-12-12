@@ -33,4 +33,12 @@ if [ -f "requirements.txt" ]; then
   pip install -r requirements.txt
 fi
 
-exec python "$ENTRY_SCRIPT" "$@"
+if [ -n "${CONFIG:-}" ]; then
+  set -- --config "$CONFIG" "$@"
+fi
+
+echo "[$(date '+%F %T')] START"
+python "$ENTRY_SCRIPT" "$@"
+code=$?
+echo "[$(date '+%F %T')] END code=$code"
+exit $code
