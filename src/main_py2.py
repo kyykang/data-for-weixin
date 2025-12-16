@@ -144,6 +144,49 @@ def compose_markdown_message(rows, max_preview, msg_cfg=None):
     return u"\n".join(lines)
 
 
+def compose_jobcode_text(rows, max_preview):
+    """
+    小白版说明：组装“文本消息”，只展示 jobcode。
+
+    - 做什么：显示总数，并列出前 max_preview 个 jobcode
+    - 为什么：你希望只要有数据就推送 jobcode 内容
+    - 返回：字符串；无数据时返回 None
+    """
+    count = len(rows)
+    if count == 0:
+        return None
+    lines = []
+    lines.append(u"数据库告警：检测到 %d 个有值的 jobcode" % count)
+    lines.append(u"——")
+    for r in rows[:max_preview]:
+        lines.append(u"jobcode=%s" % (r.get("jobcode") or u""))
+    if count > max_preview:
+        lines.append(u"更多...（已省略 %d 条）" % (count - max_preview))
+    return u"\n".join(lines)
+
+
+def compose_jobcode_markdown(rows, max_preview):
+    """
+    小白版说明：组装“Markdown 消息”，只展示 jobcode（群机器人更好看）。
+
+    - 做什么：显示总数为二级标题，并列出前 max_preview 个 jobcode
+    - 为什么：你希望只要有数据就推送 jobcode 内容
+    - 返回：字符串（Markdown）；无数据时返回 None
+    """
+    count = len(rows)
+    if count == 0:
+        return None
+    lines = []
+    lines.append(u"## 数据库告警：检测到 %d 个有值的 jobcode" % count)
+    lines.append("")
+    for r in rows[:max_preview]:
+        lines.append(u"- jobcode=%s" % (r.get("jobcode") or u""))
+    if count > max_preview:
+        lines.append("")
+        lines.append(u"> 更多...（已省略 %d 条）" % (count - max_preview))
+    return u"\n".join(lines)
+
+
 def main():
     """
     主流程：读配置→（可选）初始化示例库→查询→（干跑或真实）发送→更新去重状态。
@@ -226,44 +269,3 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
-def compose_jobcode_text(rows, max_preview):
-    """
-    小白版说明：组装“文本消息”，只展示 jobcode。
-
-    - 做什么：显示总数，并列出前 max_preview 个 jobcode
-    - 为什么：你希望只要有数据就推送 jobcode 内容
-    - 返回：字符串；无数据时返回 None
-    """
-    count = len(rows)
-    if count == 0:
-        return None
-    lines = []
-    lines.append(u"数据库告警：检测到 %d 个有值的 jobcode" % count)
-    lines.append(u"——")
-    for r in rows[:max_preview]:
-        lines.append(u"jobcode=%s" % (r.get("jobcode") or u""))
-    if count > max_preview:
-        lines.append(u"更多...（已省略 %d 条）" % (count - max_preview))
-    return u"\n".join(lines)
-
-
-def compose_jobcode_markdown(rows, max_preview):
-    """
-    小白版说明：组装“Markdown 消息”，只展示 jobcode（群机器人更好看）。
-
-    - 做什么：显示总数为二级标题，并列出前 max_preview 个 jobcode
-    - 为什么：你希望只要有数据就推送 jobcode 内容
-    - 返回：字符串（Markdown）；无数据时返回 None
-    """
-    count = len(rows)
-    if count == 0:
-        return None
-    lines = []
-    lines.append(u"## 数据库告警：检测到 %d 个有值的 jobcode" % count)
-    lines.append("")
-    for r in rows[:max_preview]:
-        lines.append(u"- jobcode=%s" % (r.get("jobcode") or u""))
-    if count > max_preview:
-        lines.append("")
-        lines.append(u"> 更多...（已省略 %d 条）" % (count - max_preview))
-    return u"\n".join(lines)
