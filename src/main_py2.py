@@ -18,7 +18,16 @@ try:
 except Exception:
     from configparser import ConfigParser  # Python 3 调试兼容
 
+<<<<<<< Updated upstream
 from db_client_py2 import init_demo_if_needed, init_demo_jobcodes, query_nonempty_jobcodes, query_nonempty_jobcodes_sqlserver
+=======
+from db_client_py2 import (
+    init_demo_if_needed,
+    init_demo_jobcodes,
+    query_nonempty_jobcodes,
+    query_nonempty_jobcodes_sqlserver,
+)
+>>>>>>> Stashed changes
 # 注意：为兼容 Python3 的干跑模式，我们在需要时再导入 wecom 客户端
 
 
@@ -158,7 +167,7 @@ def main():
         init_demo_if_needed(cfg["db"]["sqlite_path"])
         init_demo_jobcodes(cfg["db"]["sqlite_path"])
 
-    # 根据驱动选择数据源
+    # 根据驱动选择数据源（只要查到任何 jobcode 就推送）
     if cfg["db"]["driver"] == "sqlite":
         rows = query_nonempty_jobcodes(cfg["db"]["sqlite_path"])
     elif cfg["db"]["driver"] == "sqlserver":
@@ -172,14 +181,14 @@ def main():
         print("本次查询没有新的数据，结束。")
         return 0
 
-    # 根据是否使用群机器人且格式为 markdown 来选择消息格式
+    # 根据是否使用群机器人且格式为 markdown 来选择消息格式（仅展示 jobcode）
     use_robot = False
     use_markdown = False
     msg = None
     if "robot" in cfg and cfg["robot"].get("webhook"):
         use_robot = True
         fmt = cfg["robot"].get("format") or "markdown"
-        if fmt.lower() == "markdown":
+        if fmt.lower() == "markdown" and 'compose_jobcode_markdown' in globals():
             use_markdown = True
             msg = compose_jobcode_markdown(rows, args.preview)
     if msg is None:
@@ -224,8 +233,16 @@ if __name__ == "__main__":
     sys.exit(main())
 def compose_jobcode_text(rows, max_preview):
     """
+<<<<<<< Updated upstream
     组织基于 jobcode 的文本消息：显示总数与前 max_preview 个 jobcode。
     返回：字符串
+=======
+    小白版说明：组装“文本消息”，只展示 jobcode。
+
+    - 做什么：显示总数，并列出前 max_preview 个 jobcode
+    - 为什么：你希望只要有数据就推送 jobcode 内容
+    - 返回：字符串；无数据时返回 None
+>>>>>>> Stashed changes
     """
     count = len(rows)
     if count == 0:
@@ -242,8 +259,16 @@ def compose_jobcode_text(rows, max_preview):
 
 def compose_jobcode_markdown(rows, max_preview):
     """
+<<<<<<< Updated upstream
     组织基于 jobcode 的 Markdown 消息：显示总数与前 max_preview 个 jobcode。
     返回：字符串（Markdown）
+=======
+    小白版说明：组装“Markdown 消息”，只展示 jobcode（群机器人更好看）。
+
+    - 做什么：显示总数为二级标题，并列出前 max_preview 个 jobcode
+    - 为什么：你希望只要有数据就推送 jobcode 内容
+    - 返回：字符串（Markdown）；无数据时返回 None
+>>>>>>> Stashed changes
     """
     count = len(rows)
     if count == 0:
