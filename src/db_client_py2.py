@@ -210,17 +210,11 @@ def query_duplicate_jobcodes_sqlserver(host, user, password, database, port=1433
 
 def query_nonempty_jobcodes(sqlite_path):
     """
-<<<<<<< Updated upstream
-    查询所有有值的 jobcode（去掉空白），返回列表，例如：[{"jobcode": "JC-001"}, ...]
-
-    语义：SELECT DISTINCT jobcode FROM bd_jobbasfil WHERE jobcode IS NOT NULL AND TRIM(jobcode)<>'';
-=======
     小白版说明：查询 SQLite 中所有“有值”的 jobcode（去掉空白）。
 
     - 做什么：找出所有不为空的 jobcode 并去重
     - 为什么：只要查到任何 jobcode，就要推送
     - 返回：列表，如 [{"jobcode": "JC-001"}, ...]
->>>>>>> Stashed changes
     """
     conn = _connect_sqlite(sqlite_path)
     try:
@@ -229,31 +223,18 @@ def query_nonempty_jobcodes(sqlite_path):
             "SELECT DISTINCT jobcode FROM bd_jobbasfil WHERE jobcode IS NOT NULL AND TRIM(jobcode)<>''"
         )
         rows = c.fetchall()
-<<<<<<< Updated upstream
-        result = []
-        for r in rows:
-            result.append({"jobcode": r[0]})
-        return result
-=======
         return [{"jobcode": r[0]} for r in rows]
->>>>>>> Stashed changes
     finally:
         conn.close()
 
 
 def query_nonempty_jobcodes_sqlserver(host, user, password, database, port=1433):
     """
-<<<<<<< Updated upstream
-    在 SQL Server 上查询所有有值的 jobcode（去掉空白），返回列表，例如：[{"jobcode": "JC-001"}, ...]
-
-    语义：SELECT DISTINCT jobcode FROM bd_jobbasfil WHERE jobcode IS NOT NULL AND LTRIM(RTRIM(jobcode))<>'';
-=======
     小白版说明：查询 SQL Server 中所有“有值”的 jobcode（去掉空白）。
 
     - 做什么：找出所有不为空的 jobcode 并去重
     - 为什么：只要查到任何 jobcode，就要推送
     - 返回：列表，如 [{"jobcode": "JC-001"}, ...]
->>>>>>> Stashed changes
     """
     conn = _connect_sqlserver(host, user, password, database, port)
     try:
@@ -266,16 +247,9 @@ def query_nonempty_jobcodes_sqlserver(host, user, password, database, port=1433)
         rows = cur.fetchall()
         result = []
         for r in rows:
-<<<<<<< Updated upstream
-            try:
-                jobcode = r[0]
-            except Exception:
-                jobcode = getattr(r, 'jobcode', r[0])
-=======
             jobcode = getattr(r, 'jobcode', None)
             if jobcode is None:
                 jobcode = r[0]
->>>>>>> Stashed changes
             result.append({"jobcode": jobcode})
         return result
     finally:
