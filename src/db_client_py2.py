@@ -206,3 +206,54 @@ def query_duplicate_jobcodes_sqlserver(host, user, password, database, port=1433
             conn.close()
         except Exception:
             pass
+
+
+def query_nonempty_jobcodes(sqlite_path):
+    """
+    查询所有有值的 jobcode（去掉空白），返回列表，例如：[{"jobcode": "JC-001"}, ...]
+
+    语义：SELECT DISTINCT jobcode FROM bd_jobbasfil WHERE jobcode IS NOT NULL AND TRIM(jobcode)<>'';
+    """
+    conn = _connect_sqlite(sqlite_path)
+    try:
+        c = conn.cursor()
+        c.execute(
+            "SELECT DISTINCT jobcode FROM bd_jobbasfil WHERE jobcode IS NOT NULL AND TRIM(jobcode)<>''"
+        )
+        rows = c.fetchall()
+        result = []
+        for r in rows:
+            result.append({"jobcode": r[0]})
+        return result
+    finally:
+        conn.close()
+
+
+def query_nonempty_jobcodes_sqlserver(host, user, password, database, port=1433):
+    """
+    在 SQL Server 上查询所有有值的 jobcode（去掉空白），返回列表，例如：[{"jobcode": "JC-001"}, ...]
+
+    语义：SELECT DISTINCT jobcode FROM bd_jobbasfil WHERE jobcode IS NOT NULL AND LTRIM(RTRIM(jobcode))<>'';
+    """
+    conn = _connect_sqlserver(host, user, password, database, port)
+    try:
+        sql = (
+            "SELECT DISTINCT jobcode FROM bd_jobbasfil "
+            "WHERE jobcode IS NOT NULL AND LTRIM(RTRIM(jobcode))<>''"
+        )
+        cur = conn.cursor()
+        cur.execute(sql)
+        rows = cur.fetchall()
+        result = []
+        for r in rows:
+            try:
+                jobcode = r[0]
+            except Exception:
+                jobcode = getattr(r, 'jobcode', r[0])
+            result.append({"jobcode": jobcode})
+        return result
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass

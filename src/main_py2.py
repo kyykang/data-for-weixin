@@ -18,7 +18,7 @@ try:
 except Exception:
     from configparser import ConfigParser  # Python 3 调试兼容
 
-from db_client_py2 import init_demo_if_needed, init_demo_jobcodes, query_duplicate_jobcodes, query_duplicate_jobcodes_sqlserver
+from db_client_py2 import init_demo_if_needed, init_demo_jobcodes, query_nonempty_jobcodes, query_nonempty_jobcodes_sqlserver
 # 注意：为兼容 Python3 的干跑模式，我们在需要时再导入 wecom 客户端
 
 
@@ -160,9 +160,9 @@ def main():
 
     # 根据驱动选择数据源
     if cfg["db"]["driver"] == "sqlite":
-        rows = query_duplicate_jobcodes(cfg["db"]["sqlite_path"])
+        rows = query_nonempty_jobcodes(cfg["db"]["sqlite_path"])
     elif cfg["db"]["driver"] == "sqlserver":
-        rows = query_duplicate_jobcodes_sqlserver(
+        rows = query_nonempty_jobcodes_sqlserver(
             cfg["db"]["host"], cfg["db"]["user"], cfg["db"]["password"], cfg["db"]["database"], cfg["db"].get("port", 1433)
         )
     else:
@@ -181,9 +181,9 @@ def main():
         fmt = cfg["robot"].get("format") or "markdown"
         if fmt.lower() == "markdown":
             use_markdown = True
-            msg = compose_markdown_message(rows, args.preview, cfg.get("message"))
+            msg = compose_jobcode_markdown(rows, args.preview)
     if msg is None:
-        msg = compose_message(rows, args.preview, cfg.get("message"))
+        msg = compose_jobcode_text(rows, args.preview)
     if not msg:
         print("消息内容为空，结束。")
         return 0
@@ -222,3 +222,38 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
+def compose_jobcode_text(rows, max_preview):
+    """
+    组织基于 jobcode 的文本消息：显示总数与前 max_preview 个 jobcode。
+    返回：字符串
+    """
+    count = len(rows)
+    if count == 0:
+        return None
+    lines = []
+    lines.append(u"数据库告警：检测到 %d 个有值的 jobcode" % count)
+    lines.append(u"——")
+    for r in rows[:max_preview]:
+        lines.append(u"jobcode=%s" % (r.get("jobcode") or u""))
+    if count > max_preview:
+        lines.append(u"更多...（已省略 %d 条）" % (count - max_preview))
+    return u"\n".join(lines)
+
+
+def compose_jobcode_markdown(rows, max_preview):
+    """
+    组织基于 jobcode 的 Markdown 消息：显示总数与前 max_preview 个 jobcode。
+    返回：字符串（Markdown）
+    """
+    count = len(rows)
+    if count == 0:
+        return None
+    lines = []
+    lines.append(u"## 数据库告警：检测到 %d 个有值的 jobcode" % count)
+    lines.append("")
+    for r in rows[:max_preview]:
+        lines.append(u"- jobcode=%s" % (r.get("jobcode") or u""))
+    if count > max_preview:
+        lines.append("")
+        lines.append(u"> 更多...（已省略 %d 条）" % (count - max_preview))
+    return u"\n".join(lines)

@@ -21,6 +21,7 @@ except Exception:
 from db_client_py2 import (
     query_duplicate_jobcodes_sqlserver,
     query_duplicate_jobcodes,
+    _connect_sqlserver,
 )
 
 
@@ -73,17 +74,58 @@ def main():
     if db["driver"].lower() == "sqlserver":
         # 先做端口连通性测试
         ok_net = check_port(db["host"], db["port"])
-        print("网络连通性(10.250.122.101:1433)：%s" % ("OK" if ok_net else "失败"))
+        print("网络连通性(%s:%d)：%s" % (db["host"], db["port"], "OK" if ok_net else "失败"))
+
+        # 连接确认：打印服务器本地地址、实例名和当前库
+        try:
+            conn = _connect_sqlserver(db["host"], db["user"], db["password"], db["database"], db["port"])
+            cur = conn.cursor()
+            cur.execute("SELECT CONNECTIONPROPERTY('local_net_address') AS server_ip, @@SERVERNAME AS server_name, DB_NAME() AS current_db")
+            info = cur.fetchone()
+            try:
+                server_ip = info[0]; server_name = info[1]; current_db = info[2]
+            except Exception:
+                server_ip = getattr(info, 'server_ip', info[0])
+                server_name = getattr(info, 'server_name', info[1])
+                current_db = getattr(info, 'current_db', info[2])
+            print("连接确认：server_ip=%s server_name=%s current_db=%s" % (server_ip, server_name, current_db))
+
+            # 表诊断：存在性、总行数、前5个 jobcode 及其出现次数
+            cur.execute("SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME='bd_jobbasfil'")
+            exists_cnt = cur.fetchone()[0]
+            print("表存在性：bd_jobbasfil 存在=%s" % ("YES" if int(exists_cnt) > 0 else "NO"))
+
+            try:
+                cur.execute("SELECT COUNT(*) FROM bd_jobbasfil")
+                total_rows = cur.fetchone()[0]
+                print("bd_jobbasfil 总行数：%d" % int(total_rows))
+            except Exception as e:
+                print("无法读取总行数（可能是架构/schema 不同或权限问题）：%s" % e)
+
+            try:
+                cur.execute("SELECT TOP 5 jobcode, COUNT(*) AS cnt FROM bd_jobbasfil GROUP BY jobcode ORDER BY cnt DESC")
+                tops = cur.fetchall()
+                for j, c in tops:
+                    print("TOP jobcode=%s cnt=%d" % (j, int(c)))
+            except Exception as e:
+                print("无法读取 jobcode 统计（可能是架构/schema 不同或权限问题）：%s" % e)
+        except Exception as e:
+            print("连接确认失败：%s" % e)
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
         try:
             rows = query_duplicate_jobcodes_sqlserver(db["host"], db["user"], db["password"], db["database"], db["port"])
-            print("查询成功，结果条数：%d" % len(rows))
+            print("重复 jobcode 查询成功，结果条数：%d" % len(rows))
             preview = rows[:5]
             for r in preview:
-                print("jobcode=%s dup_count=%d" % (r["jobcode"], r["dup_count"]))
+                print("dup_count=%d jobcode=%s" % (r["dup_count"], r["jobcode"]))
             return 0
         except Exception as e:
-            print("查询失败：%s" % e)
+            print("重复 jobcode 查询失败：%s" % e)
             print("可能原因：未安装 SQL Server 驱动（pymssql 或 pyodbc）或数据库连接/权限问题。")
             return 1
     else:
@@ -101,4 +143,3 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
-
