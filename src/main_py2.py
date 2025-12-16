@@ -21,8 +21,8 @@ except Exception:
 from db_client_py2 import (
     init_demo_if_needed,
     init_demo_jobcodes,
-    query_nonempty_jobcodes,
-    query_nonempty_jobcodes_sqlserver,
+    query_duplicate_jobcodes,
+    query_duplicate_jobcodes_sqlserver,
 )
 # 注意：为兼容 Python3 的干跑模式，我们在需要时再导入 wecom 客户端
 
@@ -206,16 +206,16 @@ def main():
         init_demo_if_needed(cfg["db"]["sqlite_path"])
         init_demo_jobcodes(cfg["db"]["sqlite_path"])
 
-    # 根据驱动选择数据源（只要查到任何 jobcode 就推送）
     if cfg["db"]["driver"] == "sqlite":
-        rows = query_nonempty_jobcodes(cfg["db"]["sqlite_path"])
+        rows = query_duplicate_jobcodes(cfg["db"]["sqlite_path"])
     elif cfg["db"]["driver"] == "sqlserver":
-        rows = query_nonempty_jobcodes_sqlserver(
+        rows = query_duplicate_jobcodes_sqlserver(
             cfg["db"]["host"], cfg["db"]["user"], cfg["db"]["password"], cfg["db"]["database"], cfg["db"].get("port", 1433)
         )
     else:
         raise Exception("不支持的数据库驱动：%s" % cfg["db"]["driver"])
 
+    rows = [r for r in rows if (r.get("jobcode") or "").strip()]
     if not rows:
         print("本次查询没有新的数据，结束。")
         return 0
