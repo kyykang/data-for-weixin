@@ -33,6 +33,16 @@ if [ -f "requirements.txt" ]; then
   pip install -r requirements.txt
 fi
 
+ARGS=()
+for a in "$@"; do
+  case "$a" in
+    ENTRY=*) ENTRY_SCRIPT="${a#ENTRY=}" ;;
+    CONFIG=*) CONFIG="${a#CONFIG=}" ;;
+    *) ARGS+=("$a") ;;
+  esac
+done
+set -- "${ARGS[@]}"
+
 if [ -n "${CONFIG:-}" ]; then
   set -- --config "$CONFIG" "$@"
 fi
