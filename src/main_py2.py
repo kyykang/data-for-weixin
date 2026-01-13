@@ -23,6 +23,7 @@ from db_client_py2 import (
     init_demo_jobcodes,
     query_duplicate_jobcodes,
     query_duplicate_jobcodes_sqlserver,
+    query_failed_push_mysql,
 )
 # 注意：为兼容 Python3 的干跑模式，我们在需要时再导入 wecom 客户端
 
@@ -48,7 +49,7 @@ def read_config(path):
         "db": {
             "driver": cp.get("db", "driver"),
             "sqlite_path": cp.get("db", "sqlite_path"),
-            # SQL Server 可选参数（仅当 driver=sqlserver 时使用）
+            # SQL Server / MySQL 可选参数
             "host": cp.get("db", "host") if cp.has_option("db", "host") else "",
             "port": int(cp.get("db", "port")) if cp.has_option("db", "port") else 1433,
             "database": cp.get("db", "database") if cp.has_option("db", "database") else "",
@@ -56,6 +57,9 @@ def read_config(path):
             "password": cp.get("db", "password") if cp.has_option("db", "password") else "",
         },
     }
+    # MySQL 默认端口是 3306
+    if cp.get("db", "driver") == "mysql":
+        cfg["db"]["port"] = int(cp.get("db", "port")) if cp.has_option("db", "port") else 3306
     # 可选的消息模板配置
     if cp.has_section("message"):
         msg_cfg = {}
@@ -187,6 +191,57 @@ def compose_jobcode_markdown(rows, max_preview):
     return u"\n".join(lines)
 
 
+def compose_failed_push_text(rows, max_preview):
+    """
+    组装"推送失败项目"的文本消息。
+
+    参数：
+    - rows：查询结果列表，每个元素包含 field0001
+    - max_preview：最多展示的条数
+
+    返回：
+    - 字符串消息；无数据时返回 None
+    """
+    count = len(rows)
+    if count == 0:
+        return None
+    lines = []
+    lines.append(u"以下项目推送不成功")
+    lines.append(u"——")
+    for r in rows[:max_preview]:
+        field0001 = r.get("field0001") or u""
+        lines.append(u"%s" % field0001)
+    if count > max_preview:
+        lines.append(u"更多...（已省略 %d 条）" % (count - max_preview))
+    return u"\n".join(lines)
+
+
+def compose_failed_push_markdown(rows, max_preview):
+    """
+    组装"推送失败项目"的 Markdown 消息。
+
+    参数：
+    - rows：查询结果列表，每个元素包含 field0001
+    - max_preview：最多展示的条数
+
+    返回：
+    - Markdown 字符串；无数据时返回 None
+    """
+    count = len(rows)
+    if count == 0:
+        return None
+    lines = []
+    lines.append(u"## 以下项目推送不成功")
+    lines.append(u"")
+    for r in rows[:max_preview]:
+        field0001 = r.get("field0001") or u""
+        lines.append(u"- %s" % field0001)
+    if count > max_preview:
+        lines.append(u"")
+        lines.append(u"> 更多...（已省略 %d 条）" % (count - max_preview))
+    return u"\n".join(lines)
+
+
 def main():
     """
     主流程：读配置→（可选）初始化示例库→查询→（干跑或真实）发送→更新去重状态。
@@ -212,26 +267,44 @@ def main():
         rows = query_duplicate_jobcodes_sqlserver(
             cfg["db"]["host"], cfg["db"]["user"], cfg["db"]["password"], cfg["db"]["database"], cfg["db"].get("port", 1433)
         )
+    elif cfg["db"]["driver"] == "mysql":
+        rows = query_failed_push_mysql(
+            cfg["db"]["host"], cfg["db"]["user"], cfg["db"]["password"], cfg["db"]["database"], cfg["db"].get("port", 3306)
+        )
     else:
         raise Exception("不支持的数据库驱动：%s" % cfg["db"]["driver"])
 
-    rows = [r for r in rows if (r.get("jobcode") or "").strip()]
+    # 根据数据库类型过滤数据
+    if cfg["db"]["driver"] == "mysql":
+        # MySQL 查询已经在 SQL 中过滤了 field0045='2'，这里不需要额外过滤
+        pass
+    else:
+        # SQLite 和 SQL Server 查询 jobcode，过滤空值
+        rows = [r for r in rows if (r.get("jobcode") or "").strip()]
+    
     if not rows:
         print("本次查询没有新的数据，结束。")
         return 0
 
-    # 根据是否使用群机器人且格式为 markdown 来选择消息格式（仅展示 jobcode）
+    # 根据数据库类型和机器人配置选择消息格式
     use_robot = False
     use_markdown = False
     msg = None
     if "robot" in cfg and cfg["robot"].get("webhook"):
         use_robot = True
         fmt = cfg["robot"].get("format") or "markdown"
-        if fmt.lower() == "markdown" and 'compose_jobcode_markdown' in globals():
+        if fmt.lower() == "markdown":
             use_markdown = True
-            msg = compose_jobcode_markdown(rows, args.preview)
+            if cfg["db"]["driver"] == "mysql":
+                msg = compose_failed_push_markdown(rows, args.preview)
+            else:
+                msg = compose_jobcode_markdown(rows, args.preview)
+    
     if msg is None:
-        msg = compose_jobcode_text(rows, args.preview)
+        if cfg["db"]["driver"] == "mysql":
+            msg = compose_failed_push_text(rows, args.preview)
+        else:
+            msg = compose_jobcode_text(rows, args.preview)
     if not msg:
         print("消息内容为空，结束。")
         return 0

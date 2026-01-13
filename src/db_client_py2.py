@@ -32,6 +32,19 @@ except Exception:
         except Exception:
             pass
 
+# MySQL 驱动检测
+_HAS_MYSQLDB = False
+_HAS_PYMYSQL = False
+try:
+    import MySQLdb
+    _HAS_MYSQLDB = True
+except Exception:
+    try:
+        import pymysql
+        _HAS_PYMYSQL = True
+    except Exception:
+        pass
+
 
 def ensure_dir(path):
     """
@@ -84,6 +97,50 @@ def _connect_sqlserver(host, user, password, database, port=1433, timeout=8):
         # pytds 为纯 Python 驱动，安装简单；这里启用 autocommit 方便查询
         return pytds.connect(server=host, user=user, password=password, database=database, port=int(port), autocommit=True)
     raise Exception('未检测到可用的 SQL Server 驱动：请安装 pymssql、pyodbc 或 python-tds（pytds）')
+
+
+def _connect_mysql(host, user, password, database, port=3306, timeout=8):
+    """
+    连接到 MySQL 数据库。
+
+    参数：
+    - host：数据库主机地址
+    - user：用户名
+    - password：密码字符串
+    - database：数据库名
+    - port：端口（默认 3306）
+    - timeout：连接超时时间（秒）
+
+    返回：
+    - 连接对象（MySQLdb.Connection 或 pymysql.Connection）
+
+    说明：
+    - 优先使用 MySQLdb，否则使用 pymysql（纯 Python 实现）
+    - 安装方式：pip install MySQL-python 或 pip install pymysql
+    """
+    if _HAS_MYSQLDB:
+        import MySQLdb
+        return MySQLdb.connect(
+            host=host,
+            user=user,
+            passwd=password,
+            db=database,
+            port=int(port),
+            connect_timeout=timeout,
+            charset='utf8'
+        )
+    if _HAS_PYMYSQL:
+        import pymysql
+        return pymysql.connect(
+            host=host,
+            user=user,
+            password=password,
+            database=database,
+            port=int(port),
+            connect_timeout=timeout,
+            charset='utf8'
+        )
+    raise Exception('未检测到可用的 MySQL 驱动：请安装 MySQL-python 或 pymysql')
 
 
 def init_demo_if_needed(sqlite_path):
@@ -251,6 +308,42 @@ def query_nonempty_jobcodes_sqlserver(host, user, password, database, port=1433)
             if jobcode is None:
                 jobcode = r[0]
             result.append({"jobcode": jobcode})
+        return result
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def query_failed_push_mysql(host, user, password, database, port=3306):
+    """
+    查询 MySQL 中推送失败的项目（field0045='2'）。
+
+    查询语句：
+    SELECT field0001, field0045 FROM formmain_1559 WHERE field0045='2'
+
+    参数：
+    - host：MySQL 主机地址
+    - user：用户名
+    - password：密码
+    - database：数据库名
+    - port：端口（默认 3306）
+
+    返回：
+    - 列表，每个元素为字典：{"field0001": "项目名称", "field0045": "2"}
+    """
+    conn = _connect_mysql(host, user, password, database, port)
+    try:
+        sql = "SELECT field0001, field0045 FROM formmain_1559 WHERE field0045='2'"
+        cur = conn.cursor()
+        cur.execute(sql)
+        rows = cur.fetchall()
+        result = []
+        for r in rows:
+            # r[0] = field0001, r[1] = field0045
+            if r[1] == '2':  # 确认 field0045 是 '2'
+                result.append({"field0001": r[0], "field0045": r[1]})
         return result
     finally:
         try:
