@@ -1,9 +1,10 @@
 # 数据库查询并推送到企业微信（Python 2.7 版）
 
 ## 目标
-- 定时或手动查询数据库（入门用 SQLite，本地即可调试）。
+- 定时或手动查询数据库（支持 SQLite、SQL Server、MySQL）。
 - 查询到满足条件的数据时，自动向企业微信应用推送消息。
-- 在 Linux 环境使用 Python 2.7 部署，macOS 可本地调试。
+- 支持同时查询多个数据库，合并结果后统一推送。
+- 在 Linux 环境使用 Python 2.7/3.x 部署，macOS 可本地调试。
 
 ## 目录结构
 - `src/`：Python 2.7 脚本源码
@@ -44,7 +45,9 @@
    - 根据需要调整频率与日志路径。
 
 ## 配置说明（config.ini）
-```
+
+### 基础配置
+```ini
 [wecom]
 corpid=你的企业ID
 corpsecret=你的应用密钥
@@ -52,22 +55,30 @@ agentid=你的应用AgentID
 touser=接收人用户ID（可多个用竖线分隔）
 
 [db]
-driver=sqlite  # 或 sqlserver
-sqlite_path=./data/demo.sqlite
-host=10.250.122.101
-port=1433
+# 主数据库配置
+driver=sqlserver  # 可选：sqlite、sqlserver、mysql
+sqlite_path=./data/demo.sqlite  # SQLite 使用
+host=10.250.122.101  # SQL Server/MySQL 使用
+port=1433  # SQL Server 默认 1433，MySQL 默认 3306
 database=U8CLOUD202102
 user=sa
 password=******
 
+[db_mysql]
+# MySQL 数据库配置（可选，独立配置节）
+# 可与 [db] 同时使用，实现多数据库查询
+enabled=true  # 是否启用 MySQL 查询
+host=10.250.120.204
+port=3306
+database=your_database
+user=root
+password=******
+
 [robot]
 # 使用企业微信群机器人推送（推荐用于群通知）
-# webhook：在群设置里创建机器人后复制的完整地址
 webhook=https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=你的key
-# mentioned_list：可选，被@的成员，支持 @all；多个用 | 分隔
-mentioned_list=@all
-# format：消息格式，可选 markdown 或 text（默认 markdown）。
-format=markdown
+mentioned_list=@all  # 可选，被@的成员，多个用 | 分隔
+format=markdown  # 消息格式：markdown 或 text
 
 [message]
 # 可选：自定义消息模板（支持占位符）
@@ -79,11 +90,108 @@ title_markdown=## 数据库告警：检测到 {count} 条新数据
 item_markdown=- id={id} ｜ {title} ｜ {created_at}
 footer_markdown=> 更多...（已省略 {omitted} 条）
 ```
-- 如果后续使用 MySQL/PostgreSQL，可拓展 `driver` 和连接参数；当前示例专注 SQLite 以便快速联调。
- - 使用 SQL Server 时，建议安装以下任一驱动（Python 2.7 兼容）：
-   - `pymssql`（推荐，依赖 FreeTDS）：`pip2 install pymssql`
-   - `pyodbc`（需要安装 Microsoft ODBC Driver for SQL Server）：`pip2 install pyodbc`
- - 在 Linux 上安装 ODBC 驱动示例（Ubuntu）：`sudo apt-get install msodbcsql17 unixodbc-dev`
+
+### 多数据库配置说明
+
+**同时使用 SQL Server 和 MySQL（推荐）**
+```ini
+[db]
+driver=sqlserver
+host=10.250.122.101
+port=1433
+database=U8CLOUD202102
+user=sa
+password=******
+
+[db_mysql]
+enabled=true
+host=10.250.120.204
+port=3306
+database=your_database
+user=root
+password=******
+```
+
+**只使用 MySQL**
+```ini
+[db]
+driver=mysql
+host=10.250.120.204
+port=3306
+database=your_database
+user=root
+password=******
+```
+
+**禁用 MySQL 查询**
+```ini
+[db_mysql]
+enabled=false
+```
+
+## 数据库驱动安装
+
+### SQLite
+- Python 自带，无需额外安装
+
+### SQL Server
+建议安装以下任一驱动（Python 2.7/3.x 兼容）：
+- `pymssql`（推荐，依赖 FreeTDS）：
+  ```bash
+  pip install pymssql
+  ```
+- `pyodbc`（需要安装 Microsoft ODBC Driver for SQL Server）：
+  ```bash
+  pip install pyodbc
+  ```
+- 在 Linux 上安装 ODBC 驱动示例（Ubuntu）：
+  ```bash
+  sudo apt-get install msodbcsql17 unixodbc-dev
+  ```
+
+### MySQL
+安装以下任一驱动：
+- `pymysql`（推荐，纯 Python 实现）：
+  ```bash
+  pip install pymysql
+  ```
+- `MySQL-python`（需要 MySQL 客户端库）：
+  ```bash
+  pip install MySQL-python
+  ```
+
+### 虚拟环境安装示例
+```bash
+# 激活虚拟环境
+source /opt/venv/py3/bin/activate
+
+# 安装驱动
+pip install pymysql pymssql
+
+# 退出虚拟环境
+deactivate
+```
+- 不要把真实密钥提交到仓库；`config.ini` 仅在你的服务器本地保存。
+- 脚本默认只读查询，不对业务数据进行任何修改。
+
+## 功能特性
+
+### 多数据库支持
+- **SQLite**：本地调试，无需额外配置
+- **SQL Server**：查询重复 jobcode
+- **MySQL**：查询推送失败的项目（field0045='2'）
+- **多数据库同时查询**：可同时配置 SQL Server 和 MySQL，合并结果后统一推送
+
+### 消息推送
+- **企业微信应用**：通过 corpid/agentid 推送
+- **企业微信群机器人**：通过 webhook 推送（支持 @成员）
+- **消息格式**：支持文本和 Markdown 两种格式
+- **自定义模板**：可自定义消息标题、内容、尾部格式
+
+### 查询日志
+- 显示每个数据库的查询状态
+- 显示查询结果数量
+- 显示消息生成和发送状态
 
 ## 安全与说明
 - 不要把真实密钥提交到仓库；`config.ini` 仅在你的服务器本地保存。
@@ -103,3 +211,8 @@ footer_markdown=> 更多...（已省略 {omitted} 条）
 - 企业微信未收到消息：检查 `corpid/corpsecret/agentid/touser` 是否正确，确保应用有“发消息”权限。
 - Python 2.7 SSL 问题：服务器需支持现代 TLS；如遇证书报错，升级系统证书或使用离线网络策略。
 - 数据库驱动：示例用 SQLite，自带驱动即可运行；若切换到 MySQL，需要安装 `MySQLdb`/`pymysql`。
+
+## 更多文档
+- [MySQL 功能说明](MySQL功能说明.md) - MySQL 查询功能详细说明
+- [功能实现完成](功能实现完成.md) - 功能实现总结和部署指南
+- [更新说明](更新说明.md) - 版本更新内容和部署步骤
