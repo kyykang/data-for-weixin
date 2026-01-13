@@ -25,7 +25,7 @@
      注：代码按 Python 2.7 编写，干跑模式主要验证逻辑与输出。
 3. 查看输出：应能看到“将要发送的消息”以及查询到的示例数据摘要。
 
-## Linux 部署（Python 2.7）
+## Linux 部署（Python 2.7 - 旧版说明）
 1. 确认 Python 版本：
    ```
    python2 --version
@@ -43,6 +43,105 @@
      * * * * * /usr/bin/python2 /path/to/project/src/main_py2.py >> /path/to/project/logs/run.log 2>&1
      ```
    - 根据需要调整频率与日志路径。
+
+## 生产环境部署（使用虚拟环境 - 推荐）
+
+### 1. 创建虚拟环境（如果还没有）
+```bash
+# 创建 Python 3 虚拟环境
+python3 -m venv /opt/venv/py3
+
+# 激活虚拟环境
+source /opt/venv/py3/bin/activate
+
+# 安装必要的数据库驱动
+pip install pymysql pymssql
+
+# 退出虚拟环境
+deactivate
+```
+
+### 2. 部署项目
+```bash
+# 克隆或拉取项目到指定目录
+cd /opt
+git clone <your-repo-url> data-for-weixin
+cd data-for-weixin
+
+# 复制并编辑配置文件
+cp config/config.ini.example config/config.ini
+vi config/config.ini
+```
+
+### 3. 使用 run_py3.sh 运行
+项目提供了 `run_py3.sh` 脚本，自动激活虚拟环境并运行程序：
+
+```bash
+# 测试运行（干跑模式）
+VENV=/opt/venv/py3 ENTRY=/opt/data-for-weixin/src/main_py2.py \
+  /opt/data-for-weixin/run_py3.sh \
+  --config /opt/data-for-weixin/config/config.ini \
+  --dry-run
+
+# 真实运行
+VENV=/opt/venv/py3 ENTRY=/opt/data-for-weixin/src/main_py2.py \
+  /opt/data-for-weixin/run_py3.sh \
+  --config /opt/data-for-weixin/config/config.ini
+```
+
+**环境变量说明：**
+- `VENV`：虚拟环境路径
+- `ENTRY`：Python 脚本入口文件路径
+
+### 4. 配置定时任务（crontab）
+
+创建日志目录：
+```bash
+sudo mkdir -p /var/log/data-for-weixin
+sudo chown $USER:$USER /var/log/data-for-weixin
+```
+
+编辑定时任务：
+```bash
+crontab -e
+```
+
+添加以下配置（每小时执行一次）：
+```bash
+0 * * * * VENV=/opt/venv/py3 ENTRY=/opt/data-for-weixin/src/main_py2.py /opt/data-for-weixin/run_py3.sh --config /opt/data-for-weixin/config/config.ini >> /var/log/data-for-weixin/run.log 2>&1
+```
+
+**定时任务说明：**
+- `0 * * * *`：每小时的第 0 分钟执行
+- `VENV=/opt/venv/py3`：指定虚拟环境路径
+- `ENTRY=...`：指定 Python 脚本路径
+- `/opt/data-for-weixin/run_py3.sh`：运行脚本
+- `--config ...`：指定配置文件路径
+- `>> /var/log/data-for-weixin/run.log 2>&1`：日志输出到文件
+
+**其他定时频率示例：**
+```bash
+# 每 5 分钟执行一次
+*/5 * * * * VENV=/opt/venv/py3 ENTRY=/opt/data-for-weixin/src/main_py2.py /opt/data-for-weixin/run_py3.sh --config /opt/data-for-weixin/config/config.ini >> /var/log/data-for-weixin/run.log 2>&1
+
+# 每 30 分钟执行一次
+*/30 * * * * VENV=/opt/venv/py3 ENTRY=/opt/data-for-weixin/src/main_py2.py /opt/data-for-weixin/run_py3.sh --config /opt/data-for-weixin/config/config.ini >> /var/log/data-for-weixin/run.log 2>&1
+
+# 每天上午 9 点执行
+0 9 * * * VENV=/opt/venv/py3 ENTRY=/opt/data-for-weixin/src/main_py2.py /opt/data-for-weixin/run_py3.sh --config /opt/data-for-weixin/config/config.ini >> /var/log/data-for-weixin/run.log 2>&1
+```
+
+### 5. 查看日志
+```bash
+# 实时查看日志
+tail -f /var/log/data-for-weixin/run.log
+
+# 查看最近 50 行日志
+tail -50 /var/log/data-for-weixin/run.log
+
+# 搜索错误信息
+grep -i error /var/log/data-for-weixin/run.log
+```
 
 ## 配置说明（config.ini）
 
