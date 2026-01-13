@@ -1,4 +1,5 @@
 config/config.ini
+config/secrets.ini
 state/
 data/*.sqlite
 logs/

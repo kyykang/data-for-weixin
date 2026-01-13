@@ -32,18 +32,42 @@ from db_client_py2 import (
 def read_config(path):
     """
     读取 INI 配置文件，返回字典。
+    
+    安全增强：
+    - 优先从 secrets.ini 读取敏感信息（密码、密钥）
+    - 如果 secrets.ini 不存在，从 config.ini 读取（向后兼容）
+    - secrets.ini 应设置为 chmod 600 权限
 
     参数：path 为配置文件路径，例如 config/config.ini。
     返回：{"wecom": {...}, "db": {...}, "db_mysql": {...}}
     """
     if not os.path.isfile(path):
         raise Exception("配置文件不存在：%s" % path)
+    
+    # 读取主配置文件
     cp = ConfigParser()
     cp.read(path)
+    
+    # 尝试读取密钥文件
+    secrets_path = os.path.join(os.path.dirname(path), "secrets.ini")
+    secrets_cp = None
+    if os.path.isfile(secrets_path):
+        secrets_cp = ConfigParser()
+        secrets_cp.read(secrets_path)
+        print("已加载密钥文件：%s" % secrets_path)
+    
+    # 辅助函数：优先从 secrets.ini 读取，否则从 config.ini 读取
+    def get_value(section, option, default=""):
+        if secrets_cp and secrets_cp.has_section(section) and secrets_cp.has_option(section, option):
+            return secrets_cp.get(section, option)
+        if cp.has_option(section, option):
+            return cp.get(section, option)
+        return default
+    
     cfg = {
         "wecom": {
             "corpid": cp.get("wecom", "corpid"),
-            "corpsecret": cp.get("wecom", "corpsecret"),
+            "corpsecret": get_value("wecom", "corpsecret"),  # 优先从 secrets.ini 读取
             "agentid": cp.get("wecom", "agentid"),
             "touser": cp.get("wecom", "touser"),
         },
@@ -55,7 +79,7 @@ def read_config(path):
             "port": int(cp.get("db", "port")) if cp.has_option("db", "port") else 1433,
             "database": cp.get("db", "database") if cp.has_option("db", "database") else "",
             "user": cp.get("db", "user") if cp.has_option("db", "user") else "",
-            "password": cp.get("db", "password") if cp.has_option("db", "password") else "",
+            "password": get_value("db", "password"),  # 优先从 secrets.ini 读取
         },
     }
     # MySQL 默认端口是 3306
@@ -70,7 +94,7 @@ def read_config(path):
             "port": int(cp.get("db_mysql", "port")) if cp.has_option("db_mysql", "port") else 3306,
             "database": cp.get("db_mysql", "database") if cp.has_option("db_mysql", "database") else "",
             "user": cp.get("db_mysql", "user") if cp.has_option("db_mysql", "user") else "",
-            "password": cp.get("db_mysql", "password") if cp.has_option("db_mysql", "password") else "",
+            "password": get_value("db_mysql", "password"),  # 优先从 secrets.ini 读取
         }
     
     # 可选的消息模板配置
