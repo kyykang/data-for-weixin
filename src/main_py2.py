@@ -278,6 +278,7 @@ def main():
     all_messages = []
     
     # 查询主数据库（db 配置节）
+    print("正在查询主数据库 [db] driver=%s ..." % cfg["db"]["driver"])
     if cfg["db"]["driver"] == "sqlite":
         rows = query_duplicate_jobcodes(cfg["db"]["sqlite_path"])
     elif cfg["db"]["driver"] == "sqlserver":
@@ -298,6 +299,8 @@ def main():
     else:
         # SQLite 和 SQL Server 查询 jobcode，过滤空值
         rows = [r for r in rows if (r.get("jobcode") or "").strip()]
+    
+    print("主数据库 [db] 查询结果：%d 条记录" % len(rows))
     
     # 生成主数据库消息
     if rows:
@@ -325,6 +328,7 @@ def main():
     
     # 查询 MySQL 数据库（db_mysql 配置节，如果启用）
     if "db_mysql" in cfg and cfg["db_mysql"].get("enabled", True):
+        print("正在查询 MySQL 数据库 [db_mysql] ...")
         try:
             mysql_rows = query_failed_push_mysql(
                 cfg["db_mysql"]["host"], 
@@ -333,6 +337,8 @@ def main():
                 cfg["db_mysql"]["database"], 
                 cfg["db_mysql"].get("port", 3306)
             )
+            
+            print("MySQL 数据库 [db_mysql] 查询结果：%d 条记录" % len(mysql_rows))
             
             if mysql_rows:
                 use_robot = False
@@ -352,11 +358,15 @@ def main():
                     all_messages.append(mysql_msg)
         except Exception as e:
             print("MySQL 查询失败：%s" % str(e))
+    else:
+        print("MySQL 数据库 [db_mysql] 未启用或未配置")
     
     # 如果没有任何消息，结束
     if not all_messages:
-        print("本次查询没有新的数据，结束。")
+        print("所有数据库查询均无新数据，结束。")
         return 0
+    
+    print("共生成 %d 条消息，准备发送..." % len(all_messages))
     
     # 合并所有消息
     final_msg = u"\n\n".join(all_messages)
