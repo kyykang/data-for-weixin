@@ -273,7 +273,9 @@ def compose_failed_product_push_text(rows, max_preview):
     lines.append(u"以下产品推送不成功")
     lines.append(u"——")
     for r in rows[:max_preview]:
-        field0042 = r.get("field0042") or u""
+        field0042 = r.get("field0042")
+        if not field0042 or not field0042.strip():
+            field0042 = u"null"
         lines.append(u"%s" % field0042)
     if count > max_preview:
         lines.append(u"更多...（已省略 %d 条）" % (count - max_preview))
@@ -298,7 +300,9 @@ def compose_failed_product_push_markdown(rows, max_preview):
     lines.append(u"## 以下产品推送不成功")
     lines.append(u"")
     for r in rows[:max_preview]:
-        field0042 = r.get("field0042") or u""
+        field0042 = r.get("field0042")
+        if not field0042 or not field0042.strip():
+            field0042 = u"null"
         lines.append(u"- %s" % field0042)
     if count > max_preview:
         lines.append(u"")
