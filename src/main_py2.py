@@ -24,6 +24,7 @@ from db_client_py2 import (
     query_duplicate_jobcodes,
     query_duplicate_jobcodes_sqlserver,
     query_failed_push_mysql,
+    query_failed_product_push_mysql,
 )
 # 注意：为兼容 Python3 的干跑模式，我们在需要时再导入 wecom 客户端
 
@@ -254,6 +255,57 @@ def compose_failed_push_markdown(rows, max_preview):
     return u"\n".join(lines)
 
 
+def compose_failed_product_push_text(rows, max_preview):
+    """
+    组装"推送失败产品"的文本消息。
+
+    参数：
+    - rows：查询结果列表，每个元素包含 field0042
+    - max_preview：最多展示的条数
+
+    返回：
+    - 字符串消息；无数据时返回 None
+    """
+    count = len(rows)
+    if count == 0:
+        return None
+    lines = []
+    lines.append(u"以下产品推送不成功")
+    lines.append(u"——")
+    for r in rows[:max_preview]:
+        field0042 = r.get("field0042") or u""
+        lines.append(u"%s" % field0042)
+    if count > max_preview:
+        lines.append(u"更多...（已省略 %d 条）" % (count - max_preview))
+    return u"\n".join(lines)
+
+
+def compose_failed_product_push_markdown(rows, max_preview):
+    """
+    组装"推送失败产品"的 Markdown 消息。
+
+    参数：
+    - rows：查询结果列表，每个元素包含 field0042
+    - max_preview：最多展示的条数
+
+    返回：
+    - Markdown 字符串；无数据时返回 None
+    """
+    count = len(rows)
+    if count == 0:
+        return None
+    lines = []
+    lines.append(u"## 以下产品推送不成功")
+    lines.append(u"")
+    for r in rows[:max_preview]:
+        field0042 = r.get("field0042") or u""
+        lines.append(u"- %s" % field0042)
+    if count > max_preview:
+        lines.append(u"")
+        lines.append(u"> 更多...（已省略 %d 条）" % (count - max_preview))
+    return u"\n".join(lines)
+
+
 def main():
     """
     主流程：读配置→（可选）初始化示例库→查询→（干跑或真实）发送→更新去重状态。
@@ -328,7 +380,7 @@ def main():
     
     # 查询 MySQL 数据库（db_mysql 配置节，如果启用）
     if "db_mysql" in cfg and cfg["db_mysql"].get("enabled", True):
-        print("正在查询 MySQL 数据库 [db_mysql] ...")
+        print("正在查询 MySQL 数据库 [db_mysql] - 推送失败项目...")
         try:
             mysql_rows = query_failed_push_mysql(
                 cfg["db_mysql"]["host"], 
@@ -338,7 +390,7 @@ def main():
                 cfg["db_mysql"].get("port", 3306)
             )
             
-            print("MySQL 数据库 [db_mysql] 查询结果：%d 条记录" % len(mysql_rows))
+            print("MySQL 数据库 [db_mysql] 推送失败项目查询结果：%d 条记录" % len(mysql_rows))
             
             if mysql_rows:
                 use_robot = False
@@ -357,7 +409,39 @@ def main():
                 if mysql_msg:
                     all_messages.append(mysql_msg)
         except Exception as e:
-            print("MySQL 查询失败：%s" % str(e))
+            print("MySQL 推送失败项目查询失败：%s" % str(e))
+        
+        # 查询推送失败产品
+        print("正在查询 MySQL 数据库 [db_mysql] - 推送失败产品...")
+        try:
+            product_rows = query_failed_product_push_mysql(
+                cfg["db_mysql"]["host"], 
+                cfg["db_mysql"]["user"], 
+                cfg["db_mysql"]["password"], 
+                cfg["db_mysql"]["database"], 
+                cfg["db_mysql"].get("port", 3306)
+            )
+            
+            print("MySQL 数据库 [db_mysql] 推送失败产品查询结果：%d 条记录" % len(product_rows))
+            
+            if product_rows:
+                use_robot = False
+                use_markdown = False
+                product_msg = None
+                if "robot" in cfg and cfg["robot"].get("webhook"):
+                    use_robot = True
+                    fmt = cfg["robot"].get("format") or "markdown"
+                    if fmt.lower() == "markdown":
+                        use_markdown = True
+                        product_msg = compose_failed_product_push_markdown(product_rows, args.preview)
+                
+                if product_msg is None:
+                    product_msg = compose_failed_product_push_text(product_rows, args.preview)
+                
+                if product_msg:
+                    all_messages.append(product_msg)
+        except Exception as e:
+            print("MySQL 推送失败产品查询失败：%s" % str(e))
     else:
         print("MySQL 数据库 [db_mysql] 未启用或未配置")
     

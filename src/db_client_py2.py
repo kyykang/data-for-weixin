@@ -350,3 +350,39 @@ def query_failed_push_mysql(host, user, password, database, port=3306):
             conn.close()
         except Exception:
             pass
+
+
+def query_failed_product_push_mysql(host, user, password, database, port=3306):
+    """
+    查询 MySQL 中推送失败的产品（field0032='2'）。
+
+    查询语句：
+    SELECT field0042, field0032 FROM formmain_1445 WHERE field0032='2'
+
+    参数：
+    - host：MySQL 主机地址
+    - user：用户名
+    - password：密码
+    - database：数据库名
+    - port：端口（默认 3306）
+
+    返回：
+    - 列表，每个元素为字典：{"field0042": "产品名称", "field0032": "2"}
+    """
+    conn = _connect_mysql(host, user, password, database, port)
+    try:
+        sql = "SELECT field0042, field0032 FROM formmain_1445 WHERE field0032='2'"
+        cur = conn.cursor()
+        cur.execute(sql)
+        rows = cur.fetchall()
+        result = []
+        for r in rows:
+            # r[0] = field0042, r[1] = field0032
+            if r[1] == '2':  # 确认 field0032 是 '2'
+                result.append({"field0042": r[0], "field0032": r[1]})
+        return result
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
