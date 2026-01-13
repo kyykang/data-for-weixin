@@ -34,6 +34,41 @@ deactivate
 
 编辑 `/opt/data-for-weixin/config/config.ini`：
 
+**方式一：同时保留 SQL Server 和 MySQL（推荐）**
+
+```ini
+[wecom]
+corpid=你的企业ID
+corpsecret=你的应用密钥
+agentid=你的应用AgentID
+touser=接收人用户ID
+
+[db]
+# 保持原有的 SQL Server 配置
+driver=sqlserver
+host=10.250.122.101
+port=1433
+database=U8CLOUD202102
+user=sa
+password=你的密码
+
+[db_mysql]
+# 新增 MySQL 配置（独立配置节）
+enabled=true
+host=10.250.120.204
+port=3306
+database=你的数据库名
+user=root
+password=你的密码
+
+[robot]
+webhook=你的群机器人webhook
+mentioned_list=@all
+format=markdown
+```
+
+**方式二：只使用 MySQL**
+
 ```ini
 [wecom]
 corpid=你的企业ID
@@ -226,15 +261,10 @@ mysql -h 10.250.120.204 -u root -p -e "SELECT field0001, field0045 FROM formmain
 
 ## 切换数据库
 
-可以通过修改配置文件的 `driver` 参数切换数据库：
+可以通过修改配置文件灵活切换数据库：
 
+**同时使用 SQL Server 和 MySQL（推荐）**
 ```ini
-# 使用 SQLite
-[db]
-driver=sqlite
-sqlite_path=./data/demo.sqlite
-
-# 使用 SQL Server
 [db]
 driver=sqlserver
 host=10.250.122.101
@@ -243,7 +273,39 @@ database=U8CLOUD202102
 user=sa
 password=******
 
-# 使用 MySQL
+[db_mysql]
+enabled=true
+host=10.250.120.204
+port=3306
+database=your_database
+user=root
+password=******
+```
+
+**只使用 SQLite**
+```ini
+[db]
+driver=sqlite
+sqlite_path=./data/demo.sqlite
+
+# 不配置 [db_mysql] 或设置 enabled=false
+```
+
+**只使用 SQL Server**
+```ini
+[db]
+driver=sqlserver
+host=10.250.122.101
+port=1433
+database=U8CLOUD202102
+user=sa
+password=******
+
+# 不配置 [db_mysql] 或设置 enabled=false
+```
+
+**只使用 MySQL**
+```ini
 [db]
 driver=mysql
 host=10.250.120.204
@@ -251,6 +313,12 @@ port=3306
 database=your_database
 user=root
 password=******
+```
+
+**禁用 MySQL 查询**
+```ini
+[db_mysql]
+enabled=false
 ```
 
 修改后无需重启，下次定时任务执行时自动生效。

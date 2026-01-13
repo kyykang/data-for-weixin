@@ -9,24 +9,35 @@ agentid=
 touser=
 
 [db]
-# 数据库驱动：sqlite、sqlserver 或 mysql
+# 主数据库驱动：sqlite、sqlserver 或 mysql
 driver=sqlite
 # SQLite 数据文件路径（相对或绝对路径均可）
 sqlite_path=./data/demo.sqlite
-# 如果使用 SQL Server 或 MySQL，请配置以下参数
+# 如果使用 SQL Server，请配置以下参数
 host=
 port=1433
 database=
 user=
 password=
 
-# MySQL 示例配置（driver=mysql 时）：
-# driver=mysql
-# host=10.250.120.204
-# port=3306
-# database=your_database
-# user=root
+# SQL Server 示例配置（driver=sqlserver 时）：
+# driver=sqlserver
+# host=10.250.122.101
+# port=1433
+# database=U8CLOUD202102
+# user=sa
 # password=your_password
+
+[db_mysql]
+# MySQL 数据库配置（独立配置节，可与 [db] 同时使用）
+# 是否启用 MySQL 查询（true/false）
+enabled=true
+# MySQL 数据库连接信息
+host=10.250.120.204
+port=3306
+database=your_database
+user=root
+password=your_password
 
 [robot]
 # 群机器人完整 webhook 地址（形如：https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=...）

@@ -33,7 +33,7 @@ def read_config(path):
     读取 INI 配置文件，返回字典。
 
     参数：path 为配置文件路径，例如 config/config.ini。
-    返回：{"wecom": {...}, "db": {...}}
+    返回：{"wecom": {...}, "db": {...}, "db_mysql": {...}}
     """
     if not os.path.isfile(path):
         raise Exception("配置文件不存在：%s" % path)
@@ -48,7 +48,7 @@ def read_config(path):
         },
         "db": {
             "driver": cp.get("db", "driver"),
-            "sqlite_path": cp.get("db", "sqlite_path"),
+            "sqlite_path": cp.get("db", "sqlite_path") if cp.has_option("db", "sqlite_path") else "",
             # SQL Server / MySQL 可选参数
             "host": cp.get("db", "host") if cp.has_option("db", "host") else "",
             "port": int(cp.get("db", "port")) if cp.has_option("db", "port") else 1433,
@@ -60,6 +60,18 @@ def read_config(path):
     # MySQL 默认端口是 3306
     if cp.get("db", "driver") == "mysql":
         cfg["db"]["port"] = int(cp.get("db", "port")) if cp.has_option("db", "port") else 3306
+    
+    # 可选的 MySQL 配置（独立配置节）
+    if cp.has_section("db_mysql"):
+        cfg["db_mysql"] = {
+            "enabled": cp.get("db_mysql", "enabled").lower() in ["true", "1", "yes"] if cp.has_option("db_mysql", "enabled") else True,
+            "host": cp.get("db_mysql", "host") if cp.has_option("db_mysql", "host") else "",
+            "port": int(cp.get("db_mysql", "port")) if cp.has_option("db_mysql", "port") else 3306,
+            "database": cp.get("db_mysql", "database") if cp.has_option("db_mysql", "database") else "",
+            "user": cp.get("db_mysql", "user") if cp.has_option("db_mysql", "user") else "",
+            "password": cp.get("db_mysql", "password") if cp.has_option("db_mysql", "password") else "",
+        }
+    
     # 可选的消息模板配置
     if cp.has_section("message"):
         msg_cfg = {}
@@ -245,6 +257,7 @@ def compose_failed_push_markdown(rows, max_preview):
 def main():
     """
     主流程：读配置→（可选）初始化示例库→查询→（干跑或真实）发送→更新去重状态。
+    支持同时查询多个数据库（db 和 db_mysql）。
     """
     parser = argparse.ArgumentParser(description="Query DB and notify WeCom (Python 2.7)")
     parser.add_argument("--config", default="config/config.ini", help="配置文件路径")
@@ -261,6 +274,10 @@ def main():
         init_demo_if_needed(cfg["db"]["sqlite_path"])
         init_demo_jobcodes(cfg["db"]["sqlite_path"])
 
+    # 收集所有查询结果和消息
+    all_messages = []
+    
+    # 查询主数据库（db 配置节）
     if cfg["db"]["driver"] == "sqlite":
         rows = query_duplicate_jobcodes(cfg["db"]["sqlite_path"])
     elif cfg["db"]["driver"] == "sqlserver":
@@ -282,58 +299,93 @@ def main():
         # SQLite 和 SQL Server 查询 jobcode，过滤空值
         rows = [r for r in rows if (r.get("jobcode") or "").strip()]
     
-    if not rows:
+    # 生成主数据库消息
+    if rows:
+        use_robot = False
+        use_markdown = False
+        msg = None
+        if "robot" in cfg and cfg["robot"].get("webhook"):
+            use_robot = True
+            fmt = cfg["robot"].get("format") or "markdown"
+            if fmt.lower() == "markdown":
+                use_markdown = True
+                if cfg["db"]["driver"] == "mysql":
+                    msg = compose_failed_push_markdown(rows, args.preview)
+                else:
+                    msg = compose_jobcode_markdown(rows, args.preview)
+        
+        if msg is None:
+            if cfg["db"]["driver"] == "mysql":
+                msg = compose_failed_push_text(rows, args.preview)
+            else:
+                msg = compose_jobcode_text(rows, args.preview)
+        
+        if msg:
+            all_messages.append(msg)
+    
+    # 查询 MySQL 数据库（db_mysql 配置节，如果启用）
+    if "db_mysql" in cfg and cfg["db_mysql"].get("enabled", True):
+        try:
+            mysql_rows = query_failed_push_mysql(
+                cfg["db_mysql"]["host"], 
+                cfg["db_mysql"]["user"], 
+                cfg["db_mysql"]["password"], 
+                cfg["db_mysql"]["database"], 
+                cfg["db_mysql"].get("port", 3306)
+            )
+            
+            if mysql_rows:
+                use_robot = False
+                use_markdown = False
+                mysql_msg = None
+                if "robot" in cfg and cfg["robot"].get("webhook"):
+                    use_robot = True
+                    fmt = cfg["robot"].get("format") or "markdown"
+                    if fmt.lower() == "markdown":
+                        use_markdown = True
+                        mysql_msg = compose_failed_push_markdown(mysql_rows, args.preview)
+                
+                if mysql_msg is None:
+                    mysql_msg = compose_failed_push_text(mysql_rows, args.preview)
+                
+                if mysql_msg:
+                    all_messages.append(mysql_msg)
+        except Exception as e:
+            print("MySQL 查询失败：%s" % str(e))
+    
+    # 如果没有任何消息，结束
+    if not all_messages:
         print("本次查询没有新的数据，结束。")
         return 0
-
-    # 根据数据库类型和机器人配置选择消息格式
-    use_robot = False
-    use_markdown = False
-    msg = None
-    if "robot" in cfg and cfg["robot"].get("webhook"):
-        use_robot = True
-        fmt = cfg["robot"].get("format") or "markdown"
-        if fmt.lower() == "markdown":
-            use_markdown = True
-            if cfg["db"]["driver"] == "mysql":
-                msg = compose_failed_push_markdown(rows, args.preview)
-            else:
-                msg = compose_jobcode_markdown(rows, args.preview)
     
-    if msg is None:
-        if cfg["db"]["driver"] == "mysql":
-            msg = compose_failed_push_text(rows, args.preview)
-        else:
-            msg = compose_jobcode_text(rows, args.preview)
-    if not msg:
-        print("消息内容为空，结束。")
-        return 0
+    # 合并所有消息
+    final_msg = u"\n\n".join(all_messages)
 
     if args.dry_run:
         # Python 2 下 msg 是 unicode，这里编码为 UTF-8 便于终端显示；Python 3 直接使用 str
         if sys.version_info[0] == 2:
             try:
-                preview_text = msg.encode("utf-8")
+                preview_text = final_msg.encode("utf-8")
             except Exception:
-                preview_text = msg
+                preview_text = final_msg
         else:
-            preview_text = msg
+            preview_text = final_msg
         print("干跑模式：将要发送的消息如下\n" + preview_text)
     else:
         # 优先使用群机器人（如果配置了 webhook），否则使用应用接口
         if use_robot:
             if use_markdown:
                 from wecom_robot_py2 import send_markdown as robot_send_md
-                ok = robot_send_md(cfg["robot"]["webhook"], msg)
+                ok = robot_send_md(cfg["robot"]["webhook"], final_msg)
             else:
                 from wecom_robot_py2 import send_text as robot_send_text
-                ok = robot_send_text(cfg["robot"]["webhook"], msg, cfg["robot"].get("mentioned_list"))
+                ok = robot_send_text(cfg["robot"]["webhook"], final_msg, cfg["robot"].get("mentioned_list"))
             if ok:
                 print("企业微信群机器人消息已发送成功。")
         else:
             from wecom_client_py2 import get_access_token, send_text
             token = get_access_token(cfg["wecom"]["corpid"], cfg["wecom"]["corpsecret"])
-            ok = send_text(token, cfg["wecom"]["agentid"], cfg["wecom"]["touser"], msg)
+            ok = send_text(token, cfg["wecom"]["agentid"], cfg["wecom"]["touser"], final_msg)
             if ok:
                 print("企业微信应用消息已发送成功。")
 
